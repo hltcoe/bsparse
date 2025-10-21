@@ -38,7 +38,7 @@ jobs:
     runs-on: ubuntu-latest
     environment:
       name: pypi
-      url: https://pypi.org/p/trecrun
+      url: https://pypi.org/p/bsparse
     permissions:
       id-token: write  # IMPORTANT: mandatory for trusted publishing
 
@@ -97,14 +97,14 @@ jobs:
   publish-to-testpypi:
     name: Publish Python distribution to TestPyPI
     ### Comment the following line to publish to testpypi on commit
-    #if: startsWith(github.ref, 'refs/PUBLISH-DISABLED/')
+    if: startsWith(github.ref, 'refs/PUBLISH-DISABLED/')
     needs:
     - build
     runs-on: ubuntu-latest
 
     environment:
       name: testpypi
-      url: https://test.pypi.org/p/trecrun
+      url: https://test.pypi.org/p/bsparse
 
     permissions:
       id-token: write  # IMPORTANT: mandatory for trusted publishing
