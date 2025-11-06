@@ -3,3 +3,5 @@ numpy
 torch
 tqdm
 transformers
+trecrun~=0.3.0
+datasets
