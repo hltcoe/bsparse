@@ -8,6 +8,7 @@ import bsparse.models
 COMMANDS = {
     "encode": bsparse.commands.Encode,
     "check": bsparse.commands.Check,
+    "index": bsparse.commands.Index,
     "search": bsparse.commands.Search,
     "memsearch": bsparse.commands.MemSearch,
 }
