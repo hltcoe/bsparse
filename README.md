@@ -3,7 +3,7 @@
 [![Worfklow](https://github.com/andrewyates/bsparse/workflows/pytest/badge.svg)](https://github.com/andrewyates/bsparse/actions)
 [![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
 # bsparse
-bsparse is a toolkit for creating and searching learned sparse representations
+bsparse is a toolkit for creating, indexing, and searching learned sparse representations
 
 ## Usage examples
 ```
@@ -59,4 +59,35 @@ java -cp anserini-1.0.0-fatjar-AY.jar  io.anserini.index.IndexCollection \
 # 3) search index
 # Create sparse query representations in `$QUERY_VECTORS` and create an index in `$INDEX`, then:
 python -m bsparse.cli search --index $INDEX --queries $QUERY_VECTORS --out test.run --topk 1000
+
+```
+
+### Seismic backend
+
+[Seismic](https://github.com/TusKANNy/seismic) is an alternative backend that indexes learned
+sparse representations natively in Python (no Java/JAR required). The encoded JSONL files produced
+by `encode` are already in the format Seismic expects, so the same doc/query files work for both
+backends.
+
+```
+# install the Seismic Python bindings (optional dependency; only needed for this backend)
+uv pip install pyseismic-lsr
+# for best performance, build against your CPU instead:
+# RUSTFLAGS="-C target-cpu=native" uv pip install --no-binary :all: pyseismic-lsr
+
+# 1) build a Seismic index from encoded docs
+python -m bsparse.cli index --backend seismic --input nfcorpus-docs.jsonl --index $INDEX
+# if the in-memory API gives you trouble, --build-method file falls back to concatenating
+# the inputs into a temporary uncompressed JSONL file and using Seismic's file-based build
+# index hyperparameters are flags with defaults from the Seismic guidelines, e.g.:
+#   --n-postings 3000 --centroid-fraction 0.2 --summary-energy 0.5 --max-fraction 6 --min-cluster-size 2 --nknn 0
+# use --variant large_vocab for collections with more than 65k unique tokens
+
+# 2) search the index and evaluate
+python -m bsparse.cli search --backend seismic --index $INDEX \
+  --queries nfcorpus-queries.jsonl --out test.run --topk 1000 \
+  --query-cut 10 --heap-factor 0.8 --qrels beir/nfcorpus/test
+
+# query-time thread count is set via:
+#   SEISMIC_THREADS=16 python -m bsparse.cli search --backend seismic ...
 ```

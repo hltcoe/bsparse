@@ -10,6 +10,7 @@ from trecrun import TRECRun
 
 from bsparse import load_dict, save_dict
 from bsparse.anserini import Anserini
+from bsparse.seismic import Seismic
 from bsparse.utils import psgid_to_docid
 
 
@@ -152,27 +153,155 @@ class MemSearch(Command):
         return run
 
 
-class Search(Command):
+class Index(Command):
     @classmethod
     def add_arguments(cls, parser):
-        parser.add_argument("--index", type=Path, required=True, help="Anserini index path")
-        parser.add_argument("--queries", type=Path, required=True, help="Query file path")
-        parser.add_argument("--out", type=Path, required=True, help="Output file path")
-        parser.add_argument("--topk", type=int, default=1000, help="Top K results to return (default: %(default)s)")
-        parser.add_argument("--qrels", type=str, default=None, help="Relevance judgments dataset (default: %(default)s)")
+        parser.add_argument(
+            "--input",
+            type=Path,
+            nargs="+",
+            required=True,
+            help="One or more encoded JSONL doc files (plain or .gz), or directories of such files",
+        )
+        parser.add_argument("--index", type=Path, required=True, help="Output index path")
+        parser.add_argument(
+            "--backend", type=str, default="seismic", choices=["seismic"], help="Indexing backend (default: %(default)s)"
+        )
+        # Seismic index-building hyperparameters (these affect the index, so they are kwargs, not env vars).
+        # Defaults match the recommended config in the Seismic guidelines.
+        parser.add_argument(
+            "--n-postings", type=int, default=3000, help="[Seismic only] avg postings per list (default: %(default)s)"
+        )
+        parser.add_argument(
+            "--centroid-fraction",
+            type=float,
+            default=0.2,
+            help="[Seismic only] centroids per list as a fraction (default: %(default)s)",
+        )
+        parser.add_argument(
+            "--summary-energy",
+            type=float,
+            default=0.5,
+            help="[Seismic only] fraction of summary L1 norm to keep (default: %(default)s)",
+        )
+        parser.add_argument(
+            "--min-cluster-size", type=int, default=2, help="[Seismic only] minimum cluster size (default: %(default)s)"
+        )
+        parser.add_argument(
+            "--max-fraction",
+            type=float,
+            default=6,
+            help="[Seismic only] max summary block size as a fraction (default: %(default)s)",
+        )
+        parser.add_argument(
+            "--nknn", type=int, default=0, help="[Seismic only] kNN graph size; 0 disables it (default: %(default)s)"
+        )
+        parser.add_argument(
+            "--batched-indexing",
+            type=int,
+            default=100000,
+            help="[Seismic only] docs per indexing batch (default: %(default)s)",
+        )
+        parser.add_argument(
+            "--variant",
+            type=str,
+            default="standard",
+            choices=["standard", "large_vocab"],
+            help="[Seismic only] index variant; use large_vocab for >65k tokens (default: %(default)s)",
+        )
+        parser.add_argument(
+            "--build-method",
+            type=str,
+            default="dataset",
+            choices=["dataset", "file"],
+            help="[Seismic only] feed docs via the in-memory dataset API, or via a temporary "
+            "uncompressed JSONL file as a fallback (default: %(default)s)",
+        )
 
     def __init__(self, config):
         self.cfg = config
 
     def run(self):
+        if self.cfg.backend == "seismic":
+            Seismic.build(
+                self.cfg.input,
+                self.cfg.index,
+                n_postings=self.cfg.n_postings,
+                centroid_fraction=self.cfg.centroid_fraction,
+                summary_energy=self.cfg.summary_energy,
+                min_cluster_size=self.cfg.min_cluster_size,
+                max_fraction=self.cfg.max_fraction,
+                nknn=self.cfg.nknn,
+                batched_indexing=self.cfg.batched_indexing,
+                variant=self.cfg.variant,
+                method=self.cfg.build_method,
+            )
+        else:
+            raise ValueError(f"unknown indexing backend: {self.cfg.backend}")
+
+
+class Search(Command):
+    @classmethod
+    def add_arguments(cls, parser):
+        parser.add_argument("--index", type=Path, required=True, help="Index path")
+        parser.add_argument("--queries", type=Path, required=True, help="Query file path")
+        parser.add_argument("--out", type=Path, required=True, help="Output file path")
+        parser.add_argument(
+            "--backend",
+            type=str,
+            default="anserini",
+            choices=["anserini", "seismic"],
+            help="Search backend (default: %(default)s)",
+        )
+        parser.add_argument("--topk", type=int, default=1000, help="Top K results to return (default: %(default)s)")
+        parser.add_argument("--qrels", type=str, default=None, help="Relevance judgments dataset (default: %(default)s)")
+        # Backend-specific args default to None so we can tell whether the user set them: unset args fall
+        # back to the backend's own default, and passing an arg for a different backend is rejected (see run()).
+        # anserini-specific
+        parser.add_argument("--scale", type=int, default=None, help="[Anserini only] impact scaling factor (default: 50)")
+        # seismic-specific
+        parser.add_argument("--query-cut", type=int, default=None, help="[Seismic only] query_cut (default: 10)")
+        parser.add_argument("--heap-factor", type=float, default=None, help="[Seismic only] heap_factor (default: 0.8)")
+
+    # maps each backend to the args that only apply to it
+    BACKEND_ARGS = {"anserini": ["scale"], "seismic": ["query_cut", "heap_factor"]}
+
+    def __init__(self, config):
+        self.cfg = config
+
+    def _check_backend_args(self):
+        """Reject args that only apply to a backend other than the one selected."""
+        for backend, names in self.BACKEND_ARGS.items():
+            if backend == self.cfg.backend:
+                continue
+            misused = [f"--{name.replace('_', '-')}" for name in names if getattr(self.cfg, name) is not None]
+            if misused:
+                raise ValueError(f"{', '.join(misused)} only valid with the {backend} backend, not '{self.cfg.backend}'")
+
+    def run(self):
+        self._check_backend_args()
+
         if self.cfg.out.is_dir():
             raise ValueError(f"--out is a directory: {self.cfg.out}")
 
         queries = load_dict(self.cfg.queries)
         queries.ids = [psgid_to_docid(qid) for qid in queries.ids]
+        vectors = [{"vector": rep} for rep in queries.weights]
 
-        anserini = Anserini(self.cfg.index.as_posix())
-        results = anserini.query_from_vectors([{"vector": rep} for rep in queries.weights], k=self.cfg.topk)
+        if self.cfg.backend == "anserini":
+            retriever = Anserini(self.cfg.index.as_posix())
+            kwargs = {} if self.cfg.scale is None else {"scale": self.cfg.scale}
+            results = retriever.query_from_vectors(vectors, k=self.cfg.topk, **kwargs)
+        elif self.cfg.backend == "seismic":
+            retriever = Seismic(self.cfg.index.as_posix())
+            kwargs = {}
+            if self.cfg.query_cut is not None:
+                kwargs["query_cut"] = self.cfg.query_cut
+            if self.cfg.heap_factor is not None:
+                kwargs["heap_factor"] = self.cfg.heap_factor
+            results = retriever.query_from_vectors(vectors, k=self.cfg.topk, **kwargs)
+        else:
+            raise ValueError(f"unknown search backend: {self.cfg.backend}")
 
         run = TRECRun(dict(zip(queries.ids, results))).aggregate_docids(psgid_to_docid).topk(self.cfg.topk)
         print(f"saving run to: {self.cfg.out}")
