@@ -35,6 +35,19 @@ DEFAULT_BATCHED_INDEXING = 100_000
 DEFAULT_QUERY_CUT = 10
 DEFAULT_HEAP_FACTOR = 0.8
 
+# seismic's save(path) writes to path + this suffix, but load() expects the full on-disk filename
+INDEX_SUFFIX = ".index.seismic"
+
+
+def _resolve_index_path(path: str) -> str:
+    """Resolve an index path to the on-disk filename, accepting either the exact saved file or the
+    prefix that was passed to build() (to which seismic's save() appends INDEX_SUFFIX)."""
+    if os.path.isfile(path):
+        return path
+    if os.path.isfile(path + INDEX_SUFFIX):
+        return path + INDEX_SUFFIX
+    raise FileNotFoundError(f"no Seismic index found at: {path} (also tried: {path + INDEX_SUFFIX})")
+
 
 def _import_seismic():
     try:
@@ -135,7 +148,7 @@ class Seismic:
         # the index is loaded lazily so that constructing a Seismic object (and importing this
         # module) does not require the native 'seismic' package to be installed
         if self._index is None:
-            self._index = _import_seismic().SeismicIndex.load(self.index_path)
+            self._index = _import_seismic().SeismicIndex.load(_resolve_index_path(self.index_path))
         return self._index
 
     def query_from_raw_text(
@@ -258,4 +271,6 @@ class Seismic:
         index.print_space_usage_byte()
 
         index.save(str(index_path))
+        # seismic's save() appends INDEX_SUFFIX, so the on-disk filename differs from index_path
+        print(f"saved index to: {index_path}{INDEX_SUFFIX}")
         return index

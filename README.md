@@ -79,7 +79,9 @@ uv pip install pyseismic-lsr
 python -m bsparse.cli index --backend seismic --input nfcorpus-docs.jsonl --index $INDEX
 # if the in-memory API gives you trouble, --build-method file falls back to concatenating
 # the inputs into a temporary uncompressed JSONL file and using Seismic's file-based build
-# index hyperparameters are flags with defaults from the Seismic guidelines, e.g.:
+# note: seismic appends ".index.seismic" to the path, so the on-disk file is $INDEX.index.seismic;
+# search --index accepts either the build-time path or the full on-disk filename
+# index-affecting hyperparameters are flags with defaults from the Seismic guidelines, e.g.:
 #   --n-postings 3000 --centroid-fraction 0.2 --summary-energy 0.5 --max-fraction 6 --min-cluster-size 2 --nknn 0
 # use --variant large_vocab for collections with more than 65k unique tokens
 
