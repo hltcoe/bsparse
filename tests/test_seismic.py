@@ -55,6 +55,41 @@ def test_query_from_vectors_builds_arrays_and_maps_results(monkeypatch):
     assert list(captured["query_values"][1]) == pytest.approx([2.0])
 
 
+def test_warns_when_tokens_exceed_string_dtype_width(monkeypatch):
+    """Tokens longer than seismic's fixed-width string dtype (30 chars for U30) are silently
+    truncated by numpy; query_from_vectors should warn (once) when that would happen, and stay
+    silent when all tokens fit."""
+    import warnings
+
+    import bsparse.seismic as seismic_mod
+    from bsparse.seismic import Seismic
+
+    monkeypatch.setattr(seismic_mod, "_import_seismic", fake_seismic_module)
+    monkeypatch.setattr(seismic_mod, "_truncation_warned", False)
+
+    class FakeIndex:
+        def batch_search(self, queries_ids, query_components, query_values, **kwargs):
+            return [[] for _ in queries_ids]
+
+    retriever = Seismic("ignored")
+    retriever._index = FakeIndex()
+
+    # tokens within the 30-char width: no warning
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        retriever.query_from_vectors([{"vector": {"x" * 30: 1.0}}])
+
+    # a 31-char token would be truncated: warn, naming the offending token
+    long_token = "x" * 31
+    with pytest.warns(UserWarning, match="truncated.*x{31}"):
+        retriever.query_from_vectors([{"vector": {long_token: 1.0}}])
+
+    # the warning fires only once per process, so big builds aren't flooded
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        retriever.query_from_vectors([{"vector": {long_token: 1.0}}])
+
+
 def test_build_rejects_missing_input():
     from bsparse.seismic import Seismic
 

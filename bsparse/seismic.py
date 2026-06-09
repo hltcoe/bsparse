@@ -3,6 +3,7 @@ import json
 import os
 import sys
 import tempfile
+import warnings
 from contextlib import contextmanager
 
 import numpy as np
@@ -60,6 +61,30 @@ def _import_seismic():
         raise
 
     return seismic
+
+
+# set once the truncation warning has fired, so we don't re-scan every document of a large build
+_truncation_warned = False
+
+
+def _to_seismic_strings(strings: list, string_type) -> np.ndarray:
+    """Convert tokens to seismic's fixed-width unicode dtype, warning if any would be truncated.
+
+    numpy silently truncates strings longer than the dtype's width (e.g. 30 chars for "U30").
+    Truncated tokens can collide with each other or fail to match tokens that were stored without
+    truncation (e.g. by the file-based build, which bypasses numpy), so this is worth a warning.
+    """
+    global _truncation_warned
+    if not _truncation_warned:
+        width = np.dtype(string_type).itemsize // np.dtype("U1").itemsize
+        too_long = next((s for s in strings if len(s) > width), None)
+        if too_long is not None:
+            _truncation_warned = True
+            warnings.warn(
+                f"token longer than seismic's {width}-char string dtype will be truncated: {too_long!r} "
+                "(truncated tokens may collide or fail to match; further warnings suppressed)"
+            )
+    return np.array(strings, dtype=string_type)
 
 
 JSONL_SUFFIXES = (".jsonl", ".jsonl.gz")
@@ -172,7 +197,7 @@ class Seismic:
         string_type = _import_seismic().get_seismic_string()
 
         query_ids = [str(i) for i, _ in enumerate(queries)]
-        query_components = [np.array(list(q["vector"].keys()), dtype=string_type) for q in queries]
+        query_components = [_to_seismic_strings(list(q["vector"].keys()), string_type) for q in queries]
         query_values = [np.array(list(q["vector"].values()), dtype=np.float32) for q in queries]
 
         results = self.index.batch_search(
@@ -252,7 +277,7 @@ class Seismic:
             for doc_id, vector in tqdm(_iter_docs(inputs), desc="seismic: adding documents", leave=False):
                 dataset.add_document(
                     doc_id,
-                    np.array(list(vector.keys()), dtype=string_type),
+                    _to_seismic_strings(list(vector.keys()), string_type),
                     np.array(list(vector.values()), dtype=np.float32),
                 )
 
