@@ -11,8 +11,6 @@ from tqdm import tqdm
 from bsparse.models import Model
 
 
-# Index-independent, runtime-only settings may be configured via the environment.
-# Index-affecting hyperparameters are NOT env vars -- they are build()/query kwargs.
 THREADS = int(os.environ.get("SEISMIC_THREADS", os.cpu_count()))
 
 # Index-building hyperparameter defaults (override per-call via build() kwargs).

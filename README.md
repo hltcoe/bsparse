@@ -77,12 +77,16 @@ uv pip install pyseismic-lsr
 
 # 1) build a Seismic index from encoded docs
 python -m bsparse.cli index --backend seismic --input nfcorpus-docs.jsonl --index $INDEX
+# --input accepts multiple files, gzipped (.gz) input, and directories of .jsonl/.jsonl.gz files;
 # if the in-memory API gives you trouble, --build-method file falls back to concatenating
 # the inputs into a temporary uncompressed JSONL file and using Seismic's file-based build
+#
 # note: seismic appends ".index.seismic" to the path, so the on-disk file is $INDEX.index.seismic;
 # search --index accepts either the build-time path or the full on-disk filename
-# index-affecting hyperparameters are flags with defaults from the Seismic guidelines, e.g.:
+#
+# indexing hyperparameters are flags with defaults, e.g.:
 #   --n-postings 3000 --centroid-fraction 0.2 --summary-energy 0.5 --max-fraction 6 --min-cluster-size 2 --nknn 0
+#
 # use --variant large_vocab for collections with more than 65k unique tokens
 
 # 2) search the index and evaluate
@@ -90,6 +94,6 @@ python -m bsparse.cli search --backend seismic --index $INDEX \
   --queries nfcorpus-queries.jsonl --out test.run --topk 1000 \
   --query-cut 10 --heap-factor 0.8 --qrels beir/nfcorpus/test
 
-# query-time thread count is set via:
+# query-time thread count is index-independent and set via the environment:
 #   SEISMIC_THREADS=16 python -m bsparse.cli search --backend seismic ...
 ```
