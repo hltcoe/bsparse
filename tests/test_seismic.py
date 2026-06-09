@@ -42,7 +42,9 @@ def test_query_from_vectors_builds_arrays_and_maps_results(monkeypatch):
 
     assert results == [{"docA": 2.5, "docB": 1.0}, {"docC": 3.0}]
 
-    assert captured["queries_ids"] == ["0", "1"]
+    # the native batch_search requires an ndarray[str] (not a list) for the query ids
+    assert captured["queries_ids"].dtype == np.dtype("U30")
+    assert list(captured["queries_ids"]) == ["0", "1"]
     assert captured["kwargs"]["k"] == 5
     assert captured["kwargs"]["query_cut"] == 7
     assert captured["kwargs"]["heap_factor"] == 0.9

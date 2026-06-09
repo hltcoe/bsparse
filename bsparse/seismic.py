@@ -176,7 +176,7 @@ class Seismic:
         query_values = [np.array(list(q["vector"].values()), dtype=np.float32) for q in queries]
 
         results = self.index.batch_search(
-            queries_ids=query_ids,
+            queries_ids=np.array(query_ids, dtype=string_type),
             query_components=query_components,
             query_values=query_values,
             k=k,
