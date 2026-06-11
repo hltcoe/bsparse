@@ -1,7 +1,10 @@
 import pytest
-import torch
 
-from bsparse.convert import (
+
+# these tests exercise the torch-based conversion functions; torch is optional in the test env
+torch = pytest.importorskip("torch")
+
+from bsparse.convert import (  # noqa: E402
     dict2vec,
     vec2dict,
 )

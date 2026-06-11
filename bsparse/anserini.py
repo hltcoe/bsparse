@@ -3,11 +3,16 @@ import sys
 import tempfile
 from collections import Counter
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 from trecrun import TRECRun
 
-from bsparse.models import Model
 from bsparse.utils import psgid_to_docid
+
+
+if TYPE_CHECKING:
+    # only used as a type hint; importing bsparse.models would pull in torch/transformers
+    from bsparse.models import Model
 
 
 ANSERINI_JAR = os.environ.get("ANSERINI_JAR", "anserini-1.0.0-fatjar-bsparse.jar")
@@ -23,7 +28,7 @@ class Anserini:
     def __init__(self, index_path: str):
         self.index_path = index_path
 
-    def query_from_raw_text(self, queries: list[str], model: Model, k: int = 1000, scale: int = 50):
+    def query_from_raw_text(self, queries: list[str], model: "Model", k: int = 1000, scale: int = 50):
         dataset = [(str(idx), query) for idx, query in enumerate(queries)]
         ids, reps = model.encode(dataset)
         vectors = [{"vector": rep} for rep in reps]

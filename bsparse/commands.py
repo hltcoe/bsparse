@@ -1,10 +1,10 @@
 import json
+import os
 from abc import ABC, abstractmethod
 from functools import partial
 from multiprocessing import Pool
 from pathlib import Path
 
-import ir_datasets as irds
 from tqdm import tqdm
 from trecrun import TRECRun
 
@@ -12,6 +12,50 @@ from bsparse import load_dict, save_dict
 from bsparse.anserini import Anserini
 from bsparse.seismic import Seismic
 from bsparse.utils import psgid_to_docid
+
+
+def load_qrels(qrels: str) -> dict[str, dict[str, int]]:
+    """Load relevance judgments into a {query_id: {doc_id: relevance}} dict.
+
+    `qrels` may be a TREC-format qrels file or an ir_datasets name: an existing file is parsed as
+    'qid iteration docid relevance' lines, and anything else is treated as an ir_datasets name.
+    """
+    all_qrels = {}
+
+    if os.path.isfile(qrels):
+        with open(qrels, "rt", encoding="utf-8") as f:
+            for line_no, line in enumerate(f, start=1):
+                if not line.strip():
+                    continue
+                try:
+                    qid, _iteration, docid, relevance = line.split()
+                    all_qrels.setdefault(qid, {})[docid] = int(relevance)
+                except ValueError as e:
+                    raise ValueError(
+                        f"invalid TREC qrels on line {line_no} of {qrels} (expected 'qid iteration docid relevance'): {line!r}"
+                    ) from e
+        return all_qrels
+
+    # ir_datasets is imported lazily to keep the no-qrels paths light
+    import ir_datasets as irds
+
+    try:
+        dataset = irds.load(qrels)
+    except KeyError:
+        raise ValueError(
+            f"--qrels value is neither an existing file nor a known ir_datasets name: {qrels} "
+            "(pass a TREC-format qrels file path, or an ir_datasets name like 'beir/nfcorpus/test')"
+        ) from None
+
+    if not dataset.has_qrels():
+        raise ValueError(
+            f"ir_datasets dataset has no qrels: {qrels} "
+            "(pass a subset that includes relevance judgments, e.g. 'beir/nfcorpus/test' rather than 'beir/nfcorpus')"
+        )
+
+    for qr in dataset.qrels_iter():
+        all_qrels.setdefault(qr.query_id, {})[qr.doc_id] = qr.relevance
+    return all_qrels
 
 
 class Command(ABC):
@@ -100,7 +144,12 @@ class MemSearch(Command):
         parser.add_argument("--out", type=Path, required=True, help="Output file path")
         parser.add_argument("--pool", type=int, default=20, help="Multiprocessing pool size (default: %(default)s)")
         parser.add_argument("--topk", type=int, default=1000, help="Top K results to return (default: %(default)s)")
-        parser.add_argument("--qrels", type=str, default=None, help="Relevance judgments dataset (default: %(default)s)")
+        parser.add_argument(
+            "--qrels",
+            type=str,
+            default=None,
+            help="Relevance judgments: TREC qrels file or ir_datasets name (default: %(default)s)",
+        )
         parser.add_argument(
             "--aggregate",
             type=str,
@@ -115,6 +164,10 @@ class MemSearch(Command):
     def run(self):
         if self.cfg.out.is_dir():
             raise ValueError(f"--out is a directory: {self.cfg.out}")
+
+        if self.cfg.qrels:
+            # load the qrels before the (slow) search so a bad --qrels fails fast
+            all_qrels = load_qrels(self.cfg.qrels)
 
         with Pool(self.cfg.pool) as p:
             score_f = partial(score_shard, queries_fn=self.cfg.queries, topk=self.cfg.topk, aggregate=self.cfg.aggregate)
@@ -142,10 +195,6 @@ class MemSearch(Command):
 
         if self.cfg.qrels:
             print(f"evaluating with qrels: {self.cfg.qrels}")
-            all_qrels = {}
-            for qr in irds.load(self.cfg.qrels).qrels_iter():
-                all_qrels.setdefault(qr.query_id, {})[qr.doc_id] = qr.relevance
-
             metrics = run.evaluate(all_qrels)
             avg = {metric: vals["mean"] for metric, vals in metrics.items()}
             print(json.dumps(avg, indent=4, sort_keys=True))
@@ -254,7 +303,12 @@ class Search(Command):
             help="Search backend (default: %(default)s)",
         )
         parser.add_argument("--topk", type=int, default=1000, help="Top K results to return (default: %(default)s)")
-        parser.add_argument("--qrels", type=str, default=None, help="Relevance judgments dataset (default: %(default)s)")
+        parser.add_argument(
+            "--qrels",
+            type=str,
+            default=None,
+            help="Relevance judgments: TREC qrels file or ir_datasets name (default: %(default)s)",
+        )
         # Backend-specific args default to None so we can tell whether the user set them: unset args fall
         # back to the backend's own default, and passing an arg for a different backend is rejected (see run()).
         # anserini-specific
@@ -284,6 +338,10 @@ class Search(Command):
         if self.cfg.out.is_dir():
             raise ValueError(f"--out is a directory: {self.cfg.out}")
 
+        if self.cfg.qrels:
+            # load the qrels before the (slow) search so a bad --qrels fails fast
+            all_qrels = load_qrels(self.cfg.qrels)
+
         queries = load_dict(self.cfg.queries)
         queries.ids = [psgid_to_docid(qid) for qid in queries.ids]
         vectors = [{"vector": rep} for rep in queries.weights]
@@ -309,10 +367,6 @@ class Search(Command):
 
         if self.cfg.qrels:
             print(f"evaluating with qrels: {self.cfg.qrels}")
-            all_qrels = {}
-            for qr in irds.load(self.cfg.qrels).qrels_iter():
-                all_qrels.setdefault(qr.query_id, {})[qr.doc_id] = qr.relevance
-
             metrics = run.evaluate(all_qrels)
             avg = {metric: vals["mean"] for metric, vals in metrics.items()}
             print(json.dumps(avg, indent=4, sort_keys=True))
