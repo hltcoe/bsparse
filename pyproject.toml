@@ -6,7 +6,9 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "bsparse"
-dynamic = ["authors", "classifiers", "dependencies", "description", "readme", "requires-python", "version"]
+dynamic = ["authors", "classifiers", "dependencies", "optional-dependencies",
+           "description", "readme", "requires-python", "version",
+           "entry-points", "scripts", "gui-scripts"]
 
 [tool.pytest.ini_options]
 pythonpath = [
