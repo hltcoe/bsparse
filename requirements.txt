@@ -1,7 +1,10 @@
+# full dev environment: the base requirements plus the 'encode' extra (see setup.py).
+# the 'anserini' and 'seismic' extras are not needed for tests, which stub the native packages.
 ir_datasets
 numpy
-torch
 tqdm
-transformers
-trecrun~=0.3.0
+trecrun~=0.4
 datasets
+safetensors
+torch
+transformers

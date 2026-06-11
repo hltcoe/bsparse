@@ -1,6 +1,8 @@
-import torch
-
 from bsparse.jsonl import SparseRepresentations, dict2jsonl, jsonl2dict
+
+
+# torch is imported inside the functions that need it, so that torch-free paths
+# (e.g. anserini/seismic index/search over already-encoded jsonl) work without it
 
 
 def load_dict(fn) -> SparseRepresentations:
@@ -49,10 +51,14 @@ def dict2vec(ds, term2id):
     if isinstance(ds, dict):
         return _single_dict2vec(ds, term2id)
 
+    import torch
+
     return torch.stack([_single_dict2vec(d, term2id) for d in ds])
 
 
 def _single_dict2vec(d, term2id):
+    import torch
+
     terms, weights = zip(*d.items())
     termids = [term2id[term] for term in terms]
     vec = torch.zeros(len(term2id), dtype=torch.float32)
@@ -61,6 +67,8 @@ def _single_dict2vec(d, term2id):
 
 
 def token_ids_to_binary_vec(input_ids, attention_mask, special_tokens_mask, vocab_size):
+    import torch
+
     binary_ids = torch.ones_like(input_ids, dtype=torch.float) * attention_mask * (1 - special_tokens_mask)
     batch_size = binary_ids.shape[0]
     sparse_rep = torch.zeros((batch_size, vocab_size), device=binary_ids.device).scatter_reduce_(

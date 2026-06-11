@@ -1,8 +1,11 @@
 import os
 from functools import cache
 
-import torch
 from tqdm import tqdm
+
+
+# torch is imported inside the functions that need it, so that torch-free paths
+# (e.g. anserini/seismic index/search over already-encoded jsonl) work without it
 
 
 def psgid_to_docid(psgid):
@@ -12,6 +15,8 @@ def psgid_to_docid(psgid):
 
 @cache
 def get_torch_device():
+    import torch
+
     if torch.cuda.is_available():
         if os.environ.get("ASSERT_GPU_SPECIFIED", "false").lower() == "true" and not os.environ.get("CUDA_VISIBLE_DEVICES", ""):
             raise OSError("ASSERT_GPU_SPECIFIED=true but CUDA_VISIBLE_DEVICES is empty")
@@ -25,6 +30,8 @@ def get_torch_device():
 
 
 def batch_encode(tokenized, model_encodef, device, batch_size: int = 128):
+    import torch
+
     encoded = []
     with torch.no_grad():
         for i in tqdm(
@@ -39,6 +46,8 @@ def batch_encode(tokenized, model_encodef, device, batch_size: int = 128):
 
 
 def batch_encode_untok(data, model_encodef, device, batch_size: int = 128):
+    import torch
+
     encoded = []
     with torch.no_grad():
         for i in tqdm(
@@ -53,6 +62,8 @@ def batch_encode_untok(data, model_encodef, device, batch_size: int = 128):
 
 
 def token_ids_to_binary_vec(input_ids, attention_mask, special_tokens_mask, vocab_size):
+    import torch
+
     binary_ids = torch.ones_like(input_ids, dtype=torch.float) * attention_mask * (1 - special_tokens_mask)
     batch_size = binary_ids.shape[0]
     sparse_rep = torch.zeros((batch_size, vocab_size), device=binary_ids.device).scatter_reduce_(

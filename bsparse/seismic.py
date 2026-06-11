@@ -5,11 +5,15 @@ import sys
 import tempfile
 import warnings
 from contextlib import contextmanager
+from typing import TYPE_CHECKING
 
 import numpy as np
 from tqdm import tqdm
 
-from bsparse.models import Model
+
+if TYPE_CHECKING:
+    # only used as a type hint; importing bsparse.models would pull in torch/transformers
+    from bsparse.models import Model
 
 
 THREADS = int(os.environ.get("SEISMIC_THREADS", os.cpu_count()))
@@ -177,7 +181,7 @@ class Seismic:
     def query_from_raw_text(
         self,
         queries: list[str],
-        model: Model,
+        model: "Model",
         k: int = 1000,
         query_cut: int = DEFAULT_QUERY_CUT,
         heap_factor: float = DEFAULT_HEAP_FACTOR,

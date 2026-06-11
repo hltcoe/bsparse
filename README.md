@@ -18,6 +18,19 @@ source venv/bin/activate
 uv pip install -r requirements.txt
 ```
 
+The base package only needs lightweight dependencies: indexing and searching with the
+anserini/seismic backends start from already-encoded JSONL files, so they work without torch.
+Optional dependency groups cover the rest:
+- `encode`: torch, transformers, etc. for encoding text into sparse representations
+- `anserini`: pyjnius for the Anserini search backend (a JAR is also required; see below)
+- `seismic`: pyseismic-lsr for the Seismic backend
+- `all`: everything above
+
+```
+# e.g., install everything needed to encode and to search with the Seismic backend
+uv pip install 'bsparse[encode,seismic]'
+```
+
 ```
 # Request access to splade-v3: https://huggingface.co/naver/splade-v3
 # Get your huggingface API token and then:
@@ -71,7 +84,7 @@ backends.
 
 ```
 # install the Seismic Python bindings (optional dependency; only needed for this backend)
-uv pip install pyseismic-lsr
+uv pip install 'bsparse[seismic]'  # or: uv pip install pyseismic-lsr
 # for best performance, build against your CPU instead:
 # RUSTFLAGS="-C target-cpu=native" uv pip install --no-binary :all: pyseismic-lsr
 

@@ -7,6 +7,17 @@ with open("README.md", "r") as fh:
     long_description = fh.read()
 
 
+# the base install covers the index/search paths, which operate on already-encoded
+# jsonl files and don't need torch; encoding requires the 'encode' extra, and each
+# search backend has its own extra ('anserini' also needs a JAR; see the README)
+extras_require = {
+    "encode": ["datasets", "safetensors", "torch", "transformers"],
+    "anserini": ["pyjnius"],
+    "seismic": ["pyseismic-lsr"],
+}
+extras_require["all"] = sorted({dep for deps in extras_require.values() for dep in deps})
+
+
 # from https://packaging.python.org/guides/single-sourcing-package-version/
 def read(rel_path):
     here = os.path.abspath(os.path.dirname(__file__))
@@ -33,12 +44,13 @@ setuptools.setup(
     long_description_content_type="text/markdown",
     url="https://github.com/hltcoe/bsparse",
     packages=setuptools.find_packages(),
-    install_requires=["ir_datasets", "numpy", "torch", "tqdm", "transformers"],
+    install_requires=["ir_datasets", "numpy", "tqdm", "trecrun~=0.4"],
+    extras_require=extras_require,
     classifiers=[
         "Programming Language :: Python :: 3",
         "Operating System :: OS Independent",
     ],
-    python_requires=">=3.9",
+    python_requires=">=3.10",
     include_package_data=True,
     entry_points={
         "console_scripts": [
